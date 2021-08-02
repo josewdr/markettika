@@ -1,10 +1,10 @@
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Messages:
-    //   - Anyone can read.
-    //   - Authenticated users can add and edit messages.
-    //   - Validation: Check name is same as auth token and text length below 300 char or that imageUrl is a URL.
-    //   - Deletes are not allowed.
+    // Mensajes:
+    // - Cualquiera puede leer.
+    // - Los usuarios autentificados pueden añadir y editar mensajes.
+    // - Validación: Comprobar que el nombre es el mismo que el auth token y que la longitud del texto es inferior a 300 caracteres o que imageUrl es una URL.
+    // - Los borrados no están permitidos.
     match /messages/{messageId} {
       allow read;
       allow create, update: if request.auth != null
@@ -15,9 +15,9 @@ service cloud.firestore {
                       && request.resource.data.imageUrl.matches('https?://.*'));
       allow delete: if false;
     }
-    // FCM Tokens:
-    //   - Anyone can write their token.
-    //   - Reading list of tokens is not allowed.
+    // Fichas FCM:
+    // - Cualquiera puede escribir su token.
+    // - La lectura de la lista de tokens no está permitida.
     match /fcmTokens/{token} {
       allow read: if false;
       allow write;

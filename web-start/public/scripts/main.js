@@ -1,75 +1,127 @@
-/**
- * Copyright 2018 Google Inc. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-'use strict';
-
-// Signs-in Friendly Chat.
+  // Ingresar a Markettika.
 function signIn() {
-  alert('TODO: Implement Google Sign-In');
-  // TODO 1: Sign in Firebase with credential from the Google user.
+  // Iniciar sesión en Firebase utilizando popup auth y Google como proveedor de identidad.
+  var provider = new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(provider);
+ 
 }
 
-// Signs-out of Friendly Chat.
+//Sal de Markettika
 function signOut() {
-  // TODO 2: Sign out of Firebase.
+  // Salga de Firebase.
+firebase.auth().signOut();
 }
 
-// Initiate firebase auth.
+// Inicializa el autenticador de Firebase
 function initFirebaseAuth() {
-  // TODO 3: Initialize Firebase.
+  // Agragar un escuchado de cambios.
+  firebase.auth().onAuthStateChanged(authStateObserver);
 }
 
-// Returns the signed-in user's profile Pic URL.
+// Devuelve la URL de la foto del perfil del usuario conectado.
 function getProfilePicUrl() {
-  // TODO 4: Return the user's profile pic URL.
+  return firebase.auth().currentUser.photoURL || '/images/profile_placeholder.png';
 }
 
-// Returns the signed-in user's display name.
+// Devuelve el nombre de pantalla del usuario que ha iniciado sesión.
 function getUserName() {
-  // TODO 5: Return the user's display name.
+  return firebase.auth().currentUser.displayName;
 }
 
-// Returns true if a user is signed-in.
+
+// Devuelve true si un usuario ha iniciado sesión.
 function isUserSignedIn() {
-  // TODO 6: Return true if a user is signed-in.
+  return !!firebase.auth().currentUser;
 }
 
-// Saves a new message on the Firebase DB.
+// Guarda un nuevo mensaje en su base de datos Cloud Firestore.
 function saveMessage(messageText) {
-  // TODO 7: Push a new message to Firebase.
+// Añade una nueva entrada de mensaje a la base de datos.
+  return firebase.firestore().collection('messages').add({
+    name: getUserName(),
+    text: messageText,
+    profilePicUrl: getProfilePicUrl(),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(error) {
+    console.error('Error writing new message to database', error);
+  });
 }
 
-// Loads chat messages history and listens for upcoming ones.
+// Carga el historial de mensajes del chat y escucha los próximos.
 function loadMessages() {
-  // TODO 8: Load and listens for new messages.
+  // Crear la consulta para cargar los últimos 12 mensajes y escuchar los nuevos.
+  var query = firebase.firestore()
+                  .collection('messages')
+                  .orderBy('timestamp', 'desc')
+                  .limit(12);
+  
+  // Comienza a escuchar la consulta.
+  query.onSnapshot(function(snapshot) {
+    snapshot.docChanges().forEach(function(change) {
+      if (change.type === 'removed') {
+        deleteMessage(change.doc.id);
+      } else {
+        var message = change.doc.data();
+        displayMessage(change.doc.id, message.timestamp, message.name,
+                       message.text, message.profilePicUrl, message.imageUrl);
+      }
+    });
+  });
 }
 
-// Saves a new message containing an image in Firebase.
-// This first saves the image in Firebase storage.
+// Guarda un nuevo mensaje que contiene una imagen en Firebase.
+// Esto primero guarda la imagen en el almacenamiento de Firebase.
 function saveImageMessage(file) {
-  // TODO 9: Posts a new image as a message.
+  // 1 - Añadimos un mensaje con un icono de carga que se actualizará con la imagen compartida.
+  firebase.firestore().collection('messages').add({
+    name: getUserName(),
+    imageUrl: LOADING_IMAGE_URL,
+    profilePicUrl: getProfilePicUrl(),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(function(messageRef) {
+    // 2 - Sube la imagen al almacenamiento en la nube.
+    var filePath = firebase.auth().currentUser.uid + '/' + messageRef.id + '/' + file.name;
+    return firebase.storage().ref(filePath).put(file).then(function(fileSnapshot) {
+      // 3 - Generar una URL pública para el archivo.
+      return fileSnapshot.ref.getDownloadURL().then((url) => {
+        // 4 - Actualizar el marcador de posición del mensaje de chat con la URL de la imagen.
+        return messageRef.update({
+          imageUrl: url,
+          storageUri: fileSnapshot.metadata.fullPath
+        });
+      });
+    });
+  }).catch(function(error) {
+    console.error('There was an error uploading a file to Cloud Storage:', error);
+  });
 }
 
-// Saves the messaging device token to the datastore.
+// Guarda el token del dispositivo de mensajería en el almacén de datos.
 function saveMessagingDeviceToken() {
-  // TODO 10: Save the device token in the realtime datastore
+  firebase.messaging().getToken().then(function(currentToken) {
+    if (currentToken) {
+      console.log('Got FCM device token:', currentToken);
+      // Guardando el Token del dispositivo en el datastore.
+      firebase.firestore().collection('fcmTokens').doc(currentToken)
+          .set({uid: firebase.auth().currentUser.uid});
+    } else {
+      // Es necesario solicitar permisos para mostrar las notificaciones.
+      requestNotificationsPermissions();
+    }
+  }).catch(function(error){
+    console.error('Unable to get messaging token.', error);
+  });
 }
 
-// Requests permissions to show notifications.
+// Solicita permiso para mostrar notificaciones.
 function requestNotificationsPermissions() {
-  // TODO 11: Request permissions to send notifications.
+  console.log('Requesting notifications permission...');
+  firebase.messaging().requestPermission().then(function() {
+    // Notification permission granted.
+    saveMessagingDeviceToken();
+  }).catch(function(error) {
+    console.error('Unable to get permission to notify.', error);
+  });
 }
 
 // Triggered when a file is selected via the media picker.
